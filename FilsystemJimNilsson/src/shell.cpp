@@ -5,11 +5,11 @@
 using namespace std;
 
 const int MAXCOMMANDS = 8;
-const int NUMAVAILABLECOMMANDS = 15;
+const int NUMAVAILABLECOMMANDS = 16;
 
 string availableCommands[NUMAVAILABLECOMMANDS] = {
     "quit","format","ls","create","cat","save","read",
-    "rm","copy","append","rename","mkdir","cd","pwd","help"
+    "rm","copy","append","rename","mkdir","cd","pwd","help","dumpblocks",
 };
 
 /* Takes usercommand from input and returns number of commands, commands are stored in strArr[] */
@@ -93,6 +93,9 @@ int main(void) {
             case 14: // help
                 cout << help() << endl;
                 break;
+			case 15: //Dump "harddrive" to file, used for debugging
+				fileSystem.dumpHarddrive();
+				break;
 
             default:
                 cout << "Unknown command: " << commandArr[0] << endl;

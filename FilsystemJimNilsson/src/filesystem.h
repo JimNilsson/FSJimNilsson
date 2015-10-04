@@ -14,7 +14,7 @@ struct MetaData
 	{
 		//empty
 	}
-	MetaData(filetype_t type, std::string name, int location, int size, int rights)
+	MetaData(filetype_t type, std::string name, int location, int size, chmod_t rights)
 	{
 		mType = type;
 		memset(pName, 0, 16);
@@ -27,8 +27,9 @@ struct MetaData
 	filetype_t mType;
 	char pName[16];
 	int mLocation;
+	/* If type is directory, mSize (number of files and directories) * sizeof(MetaData) it contains */
 	int mSize;
-	int mRights;
+	chmod_t mRights;
 
 };
 class FileSystem
@@ -47,6 +48,8 @@ public:
      * However, feel free to change the signatures, these are just examples.
      * Remember to remove 'const' if needed.
      */
+	void dumpHarddrive();
+
     std::string format();
 	std::string ls();
     std::string ls(std::string &path);  // optional
@@ -67,8 +70,9 @@ public:
 
     /* Add your own member-functions if needed */
 private:
-	int findLocation(int blockNr, std::string& dirPath);
-	MetaData getMetaData(int blockNr, std::string& dirPath);
+	int findLocation(int blockNr, std::string& dirPath, int seekLength = sizeof(MetaData));
+	int findParentLocation(int blockNr, std::string& path, int seekLength = sizeof(MetaData));
+	MetaData getMetaData(int blockNr, std::string& dirPath, int seekLength = sizeof(MetaData));
 	int remove(int blockNr, std::string& path);
 	int getSize(int blockNr, std::string& path);
 	
