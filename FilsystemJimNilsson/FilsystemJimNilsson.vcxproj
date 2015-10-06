@@ -122,6 +122,7 @@
     <ClInclude Include="src\blockdevice.h" />
     <ClInclude Include="src\filesystem.h" />
     <ClInclude Include="src\memblockdevice.h" />
+    <ClInclude Include="src\MetaData.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="src\block.cpp" />

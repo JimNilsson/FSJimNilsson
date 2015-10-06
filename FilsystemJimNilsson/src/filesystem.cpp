@@ -188,101 +188,7 @@ int FileSystem::getSize(int blockNr, std::string& path)
 	return 0;
 }
 
-std::string FileSystem::create(std::string & filePath)
-{
-	if (filePath.compare(0, 1, "/") != 0)
-		filePath = mCurrentDir + filePath;
-	std::vector<std::string> psplit = split(filePath, '/');
-	if (psplit[0].length() > 16)
-		return std::string("Filenames larger than 16 characters are not supported\n");
-	//Find directory where file metadata will be created
-	std::string dirpath = filePath.substr(0, filePath.size() - psplit[0].size());
-	int curLoc = findLocation(0, dirpath);
-	if (curLoc < 0)
-		return std::string("Failed creating file, does the directory exist?\n");
-
-	//Check if access to write in parent dir
-	std::string tst = filePath.substr(0, filePath.size() - psplit[0].size());
-	if (!(CH_WRITE & getMetaData(0, filePath.substr(0, filePath.size() - psplit[0].size())).mRights))
-		return std::string("Access denied.\n");
-
-	//Check if file already exists
-	if (findLocation(0, filePath) >= 0)
-		return std::string("File already exists or attempted to create inside a file and not a directory.\n");
-
-	//Make sure we try to write the file in a directory and not a file
-	if (getMetaData(0, dirpath).mType != ENUM_DIRECTORY)
-	return std::string("Can't create a file in a file\n");
-
-	//If directory exists and file !exists, create the file
-	int newFileBlock = mMemblockDevice.findFreeBlock();
-	if (newFileBlock < 0)
-		return std::string("No free blocks availible\n");
-
-	//Find block which parent resides in
-	int parentBlock = findParentLocation(0, filePath);
-	if (parentBlock < 0)
-		return std::string("Failure in finding block.\n");
-
-	int inBlockLocation = 0;
-	mMemblockDevice.readBlock(parentBlock, pRAM);
-	MetaData temp;
-	memcpy(&temp, pRAM, sizeof(MetaData));
-	while (temp.mLocation != curLoc)
-	{
-		inBlockLocation += sizeof(MetaData);
-		memcpy(&temp, &pRAM[inBlockLocation], sizeof(MetaData));
-	}
-
-	//Update the directory where the file will be created
-	temp.mSize += sizeof(MetaData);
-	if (temp.mSize > 510 && mMemblockDevice.findFreeBlock() < 0)
-		return std::string("No free blocks availible.\n");
-	memcpy(&pRAM[inBlockLocation], &temp, sizeof(MetaData));
-	mMemblockDevice.writeBlock(parentBlock, pRAM);
-
-	//Mark the block where file will reside as occupied first
-	mMemblockDevice.readBlock(249, pRAM);
-	pRAM[newFileBlock] = 1;
-	mMemblockDevice.writeBlock(249, pRAM);
-
-	//MetaData to be written into directory
-	MetaData filedata = MetaData(ENUM_FILE, psplit.front(), newFileBlock, 0, CH_ALL);
-
-	//If the metadata cant fit in the directory, we need to expand the directory to another block
-	if (temp.mSize >= 512 - sizeof(MetaData))
-	{
-		int oldBlock = parentBlock;
-		parentBlock = mMemblockDevice.findFreeBlock();
-		if (parentBlock < 0)
-		{
-			//If fail, unreserve the block where the file would have resided
-			mMemblockDevice.readBlock(249, pRAM);
-			pRAM[newFileBlock] = 0;
-			mMemblockDevice.writeBlock(249, pRAM);
-			return std::string("No free blocks.\n");
-		}
-
-		curLoc = parentBlock;
-
-		mMemblockDevice.readBlock(oldBlock, pRAM);
-		pRAM[511] = (unsigned char)parentBlock; //Last byte points to "continuation"-block
-		mMemblockDevice.writeBlock(oldBlock, pRAM);
-
-		memset(pRAM, 0, 512);
-		memcpy(pRAM, &filedata, sizeof(MetaData));
-	}
-	else
-	{
-		mMemblockDevice.readBlock(curLoc, pRAM);
-		memcpy(&pRAM[temp.mSize - sizeof(MetaData)], &filedata, sizeof(MetaData));
-	}
-	mMemblockDevice.writeBlock(curLoc, pRAM);
-	return std::string("New file created at ").append(filePath).append("\n");
-}
-
-/* This function ended up really similar to create() */
-std::string FileSystem::mkdir(std::string& filePath)
+std::string FileSystem::create(std::string filePath, filetype_t type)
 {
 	if (filePath.compare(0, 1, "/") != 0)
 		filePath = mCurrentDir + filePath;
@@ -347,10 +253,10 @@ std::string FileSystem::mkdir(std::string& filePath)
 	mMemblockDevice.writeBlock(249, pRAM);
 
 	//MetaData to be written into directory
-	MetaData filedata = MetaData(ENUM_DIRECTORY, psplit.front(), newFileBlock, 0, CH_ALL);
+	MetaData filedata = MetaData(type, psplit.front(), newFileBlock, 0, CH_ALL);
 
 	//If the metadata cant fit in the directory, we need to expand the directory to another block
-	if (temp.mSize % 512 >= 512 - sizeof(MetaData))
+	if (((temp.mSize - 32) / 32) % 15 == 0 && temp.mSize != 32/*(temp.mSize - 32) % 512 >= 512 - sizeof(MetaData)*/)
 	{
 		int oldBlock = parentBlock;
 		parentBlock = mMemblockDevice.findFreeBlock();
@@ -371,15 +277,35 @@ std::string FileSystem::mkdir(std::string& filePath)
 
 		memset(pRAM, 0, 512);
 		memcpy(pRAM, &filedata, sizeof(MetaData));
+		std::cout << "Metadata cool written at block: " << curLoc << " Location " << 0 << "\n";
 	}
 	else
 	{
+		std::cout << "Metadata written at block: " << curLoc << " Location " << (temp.mSize - 32) % (512 -32) << "\n";
 		mMemblockDevice.readBlock(curLoc, pRAM);
-		memcpy(&pRAM[(temp.mSize - 32) % 512], &filedata, sizeof(MetaData));
+		memcpy(&pRAM[(temp.mSize - 32) % (512-32)], &filedata, sizeof(MetaData));
 	}
+	std::cout << "temp.msize = " << temp.mSize << "\n";
 	mMemblockDevice.writeBlock(curLoc, pRAM);
-	return std::string("New directory created at ").append(filePath).append("\n");
+	if (type == ENUM_FILE)
+	{
+		//Request initial data to be written to file
+		std::cout << "Enter data to be written to new file:\n";
+		std::string input("");
+		do
+		{
+			if (input.size() > 0)
+				std::cout << "File too large to be written, try again\n";
+			std::getline(std::cin, input);
+
+		} while (appendString(filePath, input) < 0);
+		
+		return std::string("New file created at ").append(filePath).append("\n");
+	}
+	else
+		return std::string("New directory created at ").append(filePath).append("\n");
 }
+
 
 std::string FileSystem::cd(std::string & dir)
 {
@@ -464,6 +390,79 @@ int FileSystem::remove(int blockNr, std::string & path)
 	return 0;
 }
 
+/* Appends string content to end of file pointed to by filePath */
+int FileSystem::appendString(std::string path, std::string content)
+{
+	//Check if relative or absolute path
+	if (path.compare(0, 1, "/") != 0)
+		path = mCurrentDir + path;
+
+	//Find block where content will be written
+	int blockToWrite = findLocation(0, path);
+	if (blockToWrite < 0)
+		return -1;
+	//File might span several blocks
+	mMemblockDevice.readBlock(blockToWrite, pRAM);
+	while (pRAM[511] != 0)
+	{
+		blockToWrite = pRAM[511];
+		mMemblockDevice.readBlock(pRAM[511], pRAM);
+	}
+
+	//Check if there is enough space to write the content
+	MetaData md = getMetaData(0, path);
+	int freeSpace = mMemblockDevice.spaceLeft() * 511; //Only 511 usable bytes per block due to last one being reserved for pointer to next block if there is one
+	if (content.size() > (511 - md.mSize) + freeSpace)
+		return -1;
+
+	//Write the data
+	int initialWrite = std::min(511 - (md.mSize % 512), (int)content.size());
+	mMemblockDevice.readBlock(blockToWrite, pRAM);
+	memcpy(&pRAM[md.mSize % 512], content.c_str(), initialWrite);
+	mMemblockDevice.writeBlock(blockToWrite, pRAM);
+	int bytesWritten = initialWrite;
+	while (bytesWritten < content.size())
+	{
+		//If there's more data to write we need to allocate a new block.		
+		int newBlock = mMemblockDevice.findFreeBlock();
+		//Mark new block as occupied
+		mMemblockDevice.readBlock(249, pRAM);
+		pRAM[newBlock] = 1;
+		mMemblockDevice.writeBlock(249, pRAM);
+		//Make previous block point to the new block at th end
+		mMemblockDevice.readBlock(blockToWrite, pRAM);
+		pRAM[511] = newBlock; //Point to new block
+		mMemblockDevice.writeBlock(blockToWrite, pRAM);
+
+		//Write data to new block
+		blockToWrite = newBlock;
+		mMemblockDevice.readBlock(blockToWrite, pRAM);
+		int toWrite = std::min(511, (int)(content.size() - bytesWritten));
+		memcpy(pRAM, content.substr(bytesWritten, toWrite).c_str(), toWrite);
+		mMemblockDevice.writeBlock(blockToWrite, pRAM);
+		bytesWritten += toWrite;
+	}
+
+	//Update the metadata with the new size
+	md.mSize += bytesWritten;
+	//Find location of metadata to update
+	std::vector<std::string> psplit = split(path);
+	std::string dirpath = path.substr(0, path.size() - psplit[0].size());
+	int metaBlock = findLocation(0, dirpath);
+	int inBlockLocation = 0;
+	MetaData comp;
+	mMemblockDevice.readBlock(metaBlock, pRAM);
+	memcpy(&comp, pRAM, sizeof(MetaData));
+	while (strcmp(md.pName, comp.pName) != 0)
+	{
+		inBlockLocation += 32;
+		memcpy(&comp, &pRAM[inBlockLocation], sizeof(MetaData));
+	}
+	memcpy(&pRAM[inBlockLocation], &md, sizeof(MetaData));
+	mMemblockDevice.writeBlock(metaBlock, pRAM);
+
+	return 0;
+}
 
 
 std::string FileSystem::pwd()

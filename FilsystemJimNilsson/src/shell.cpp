@@ -51,7 +51,7 @@ int main(void) {
 				cout << fileSystem.ls();
                 break;
             case 3: // create
-				cout << fileSystem.create(commandArr[1]);
+				cout << fileSystem.create(commandArr[1], ENUM_FILE);
                 break;
             case 4: // cat
 
@@ -79,7 +79,7 @@ int main(void) {
                 break;
 
             case 11: // mkdir
-				cout << fileSystem.mkdir(commandArr[1]);
+				cout << fileSystem.create(commandArr[1], ENUM_DIRECTORY);
                 break;
 
             case 12: // cd

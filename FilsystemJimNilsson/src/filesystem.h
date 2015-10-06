@@ -2,36 +2,13 @@
 #define FILESYSTEM_H
 
 #include "memblockdevice.h"
+#include "MetaData.h"
+#include <algorithm>
 
 /* Splits a filepath into multiple strings */
 std::vector<std::string> split(const std::string &filePath, const char delim = '/');
 
-enum chmod_t : int {CH_READ = 2, CH_WRITE = 4, CH_REMOVE = 1, CH_ALL = 7};
-enum filetype_t : int {ENUM_DIRECTORY = 1, ENUM_FILE = 2, ENUM_ERROR = -1};
-struct MetaData
-{
-	MetaData()
-	{
-		//empty
-	}
-	MetaData(filetype_t type, std::string name, int location, int size, chmod_t rights)
-	{
-		mType = type;
-		memset(pName, 0, 16);
-		strcpy_s(pName, name.c_str());
-		//name.copy(pName, sizeof(pName));
-		mLocation = location;
-		mSize = size;
-		mRights = rights;
-	}
-	filetype_t mType;
-	char pName[16];
-	int mLocation;
-	/* If type is directory, mSize (number of files and directories) * sizeof(MetaData) it contains */
-	int mSize;
-	chmod_t mRights;
 
-};
 class FileSystem
 {
 private:
@@ -51,10 +28,9 @@ public:
 	void dumpHarddrive();
 
     std::string format();
-	std::string ls();
+	std::string ls(); //Prints contents of current directory
     std::string ls(std::string &path);  // optional
-    std::string create(std::string &filePath);
-	std::string mkdir(std::string& filePath);
+    std::string create(std::string path, filetype_t type); //Creates file or directory
 	std::string pwd();
     //std::string cat(std::string &fileName) const;
     //std::string save(const std::string &saveFile) const;
@@ -62,6 +38,7 @@ public:
     std::string rm(std::string &path);
 	std::string cd(std::string& dir);
 	//std::string copy(const std::string &source, const std::string &dest);
+	int appendString(std::string path, std::string content);
 
     ///* Optional */
     //std::string append(const std::string &source, const std::string &app);

@@ -34,9 +34,16 @@ Block& MemBlockDevice::operator[](int index) const {
     }
 }
 
+/* Returns number of unallocated blocks */
 int MemBlockDevice::spaceLeft() const {
-    /* Not yet implemented */
-    return 0;
+	std::string blocks = readBlock(249).toString();
+	int freeBlocks = 0;
+	for (int i = 0; i < 249; ++i)
+	{
+		if (blocks[i] == 0)
+			++freeBlocks;
+	}
+	return freeBlocks;
 }
 
 int MemBlockDevice::writeBlock(int blockNr, const std::vector<char> &vec) {
