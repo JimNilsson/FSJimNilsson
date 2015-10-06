@@ -41,7 +41,7 @@ public:
 	int appendString(std::string path, std::string content);
 
     ///* Optional */
-    //std::string append(const std::string &source, const std::string &app);
+    std::string append(std::string sourcefile, std::string destfile);
     //std::string rename(const std::string &source, const std::string &newName);
     //std::string chmod(int permission, const std::string &file);
 

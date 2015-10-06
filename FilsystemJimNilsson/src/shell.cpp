@@ -71,7 +71,7 @@ int main(void) {
                 break;
 
             case 9: // append
-
+				cout << fileSystem.append(commandArr[1], commandArr[2]);
                 break;
 
             case 10: // rename

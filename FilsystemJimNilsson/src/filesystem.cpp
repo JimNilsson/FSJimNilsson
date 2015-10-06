@@ -205,8 +205,8 @@ std::string FileSystem::create(std::string filePath, filetype_t type)
 	mMemblockDevice.readBlock(curLoc, pRAM);
 	while (pRAM[511] != 0)
 	{
-		curLoc = pRAM[511];
-		mMemblockDevice.readBlock(pRAM[511], pRAM);
+		curLoc = (unsigned char) pRAM[511];
+		mMemblockDevice.readBlock(curLoc, pRAM);
 	}
 
 	//Check if access to write in parent dir
@@ -405,8 +405,8 @@ int FileSystem::appendString(std::string path, std::string content)
 	mMemblockDevice.readBlock(blockToWrite, pRAM);
 	while (pRAM[511] != 0)
 	{
-		blockToWrite = pRAM[511];
-		mMemblockDevice.readBlock(pRAM[511], pRAM);
+		blockToWrite = (unsigned char) pRAM[511];
+		mMemblockDevice.readBlock(blockToWrite, pRAM);
 	}
 
 	//Check if there is enough space to write the content
@@ -416,15 +416,17 @@ int FileSystem::appendString(std::string path, std::string content)
 		return -1;
 
 	//Write the data
-	int initialWrite = std::min(511 - (md.mSize % 512), (int)content.size());
+	int initialWrite = std::min(511 - (md.mSize % 511), (int)content.size());
 	mMemblockDevice.readBlock(blockToWrite, pRAM);
-	memcpy(&pRAM[md.mSize % 512], content.c_str(), initialWrite);
+	memcpy(&pRAM[md.mSize % 511], content.c_str(), initialWrite);
 	mMemblockDevice.writeBlock(blockToWrite, pRAM);
 	int bytesWritten = initialWrite;
 	while (bytesWritten < content.size())
 	{
 		//If there's more data to write we need to allocate a new block.		
 		int newBlock = mMemblockDevice.findFreeBlock();
+		if (newBlock < 0)
+			return -1;
 		//Mark new block as occupied
 		mMemblockDevice.readBlock(249, pRAM);
 		pRAM[newBlock] = 1;
@@ -461,7 +463,51 @@ int FileSystem::appendString(std::string path, std::string content)
 	memcpy(&pRAM[inBlockLocation], &md, sizeof(MetaData));
 	mMemblockDevice.writeBlock(metaBlock, pRAM);
 
-	return 0;
+	return bytesWritten;
+}
+
+std::string FileSystem::append(std::string sourcefile, std::string destfile)
+{
+	//Check if relative or absolute path
+	if (sourcefile.compare(0, 1, "/") != 0)
+		sourcefile = mCurrentDir + sourcefile;
+	if (destfile.compare(0, 1, "/") != 0)
+		destfile = mCurrentDir + destfile;
+
+	//Make sure the files exist
+	if (findLocation(0, sourcefile) < 0)
+		return std::string("File missing.\n");
+	if (findLocation(0, destfile) < 0)
+		return std::string("File missing.\n");
+	
+
+	//Find size of files
+	MetaData sourceMetaData = getMetaData(0, sourcefile);
+	MetaData destMetaData = getMetaData(0, destfile);
+	if (sourceMetaData.mType != ENUM_FILE || destMetaData.mType != ENUM_FILE)
+		return std::string("append only works on files, not directories.\n");
+	int blockToRead = sourceMetaData.mLocation;
+	int bytesToWrite = sourceMetaData.mSize;
+	int bytesWritten = 0;
+	while (bytesWritten < bytesToWrite)
+	{
+		if (bytesWritten > 0)
+		{
+			mMemblockDevice.readBlock(blockToRead, pRAM);
+			blockToRead = (unsigned char) pRAM[511];
+		}
+
+		std::string appstr = mMemblockDevice.readBlock(blockToRead).toString();
+		appstr = appstr.substr(0, std::min(bytesToWrite - bytesWritten, 511));
+		int k;
+		k = appendString(destfile, appstr);
+		if (k < 0)
+			return std::string("Something went wrong when appending to file.\n");
+		bytesWritten += k;
+	}
+	
+
+	return std::string("Successfully appended ").append(sourcefile).append(" to ").append(destfile).append("\n");
 }
 
 
@@ -474,12 +520,15 @@ std::string FileSystem::pwd()
 void FileSystem::dumpHarddrive()
 {
 	FILE* f;
-	fopen_s(&f, "datadump.txt", "w");
+	FILE* d;
+	fopen_s(&f, "datadump.txt", "w");//Shows metadata
+	fopen_s(&d, "rawdatadump.txt", "w");//just raw data
 	std::string s;
 	for (int i = 0; i < 250; ++i)
 	{
 		s = "";
 		mMemblockDevice.readBlock(i, pRAM);
+		fwrite(pRAM, sizeof(char), 511, d);
 		MetaData md;
 		s.append(std::to_string(i));
 		s.append("   ");
@@ -504,6 +553,7 @@ void FileSystem::dumpHarddrive()
 		fwrite(s.c_str(), sizeof(char), s.size(), f);
 		
 	}
+	fclose(d);
 	fclose(f);
 
 

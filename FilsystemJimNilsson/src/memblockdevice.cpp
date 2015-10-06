@@ -109,7 +109,7 @@ int MemBlockDevice::size() const {
 int MemBlockDevice::findFreeBlock()
 {
 	std::string freeIndex = this->memBlocks[249].toString();
-	for (int i = 0; i < this->memBlocks->size(); ++i)
+	for (int i = 0; i < nrOfBlocks - 1; ++i)
 	{
 		if (freeIndex[i] == 0)
 			return i;
