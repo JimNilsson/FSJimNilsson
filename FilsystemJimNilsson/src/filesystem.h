@@ -32,12 +32,12 @@ public:
     std::string ls(std::string &path);  // optional
     std::string create(std::string path, filetype_t type); //Creates file or directory
 	std::string pwd();
-    //std::string cat(std::string &fileName) const;
+    std::string cat(std::string path);
     //std::string save(const std::string &saveFile) const;
     //std::string read(const std::string &saveFile) const;
     std::string rm(std::string &path);
-	std::string cd(std::string& dir);
-	//std::string copy(const std::string &source, const std::string &dest);
+	std::string cd(std::string dir);
+	std::string copy(std::string source, std::string dest);
 	int appendString(std::string path, std::string content);
 
     ///* Optional */
@@ -51,7 +51,8 @@ private:
 	int findParentLocation(int blockNr, std::string& path, int seekLength = sizeof(MetaData));
 	MetaData getMetaData(int blockNr, std::string& dirPath, int seekLength = sizeof(MetaData));
 	int remove(int blockNr, std::string& path);
-	int getSize(int blockNr, std::string& path);
+	int getSize(std::string path);
+	std::string pathToAbsolutePath(std::string path);
 	
 };
 

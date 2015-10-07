@@ -43,20 +43,21 @@ std::string FileSystem::ls()
 	{
 		if (j + sizeof(MetaData) > 510)
 		{
-			int nextBlock = (int)pRAM[511];
-			mMemblockDevice.readBlock(nextBlock, pRAM); //Last byte (unsigned char) points to next block if file is larger than 1 block
+			location = (unsigned char)pRAM[511]; //Last byte (unsigned char) points to next block if file is larger than 1 block
 			i += j;
 			j = 0;
 			
 		}
+		mMemblockDevice.readBlock(location, pRAM);
 		MetaData temp;
 		memcpy(&temp, &pRAM[j], sizeof(MetaData));
 		std::string fp = mCurrentDir;
-		fp.append(temp.pName);
-		
+		fp.append(temp.pName).append("/");
+		std::string spaces("                    ");
+
 		retstr += temp.pName;
-		retstr += "      ";
-		retstr += std::to_string(getSize(temp.mLocation, fp));
+		retstr += spaces.substr(0,spaces.size() - strlen(temp.pName));
+		retstr += std::to_string(getSize(fp)).append(" B");
 		retstr += "\n";
 		j += sizeof(MetaData);
 	}
@@ -65,35 +66,35 @@ std::string FileSystem::ls()
 
 std::string FileSystem::ls(std::string & path)
 {
-	std::string retstr = "";
+	std::string retstr = "./\n";
+	path = pathToAbsolutePath(path);
 	unsigned int location = findLocation(0, path);
-	if (location < 0)
-		return std::string("Error in finding path.\n");
+	int seekLength = getMetaData(0, path).mSize;
 	mMemblockDevice.readBlock(location, pRAM);
 	MetaData md;
 	memcpy(&md, pRAM, sizeof(MetaData));
 	int j = 0;
 	int i = 0;
-	while ((j + i) < md.mSize)
+	while ((j + i) < seekLength)
 	{
-		if (j * sizeof(MetaData) + sizeof(MetaData) > 510)
+		if (j + sizeof(MetaData) > 510)
 		{
-			unsigned char nextBlock = (unsigned char)pRAM[511];
-			
-			mMemblockDevice.readBlock((int)nextBlock, pRAM); //Last byte (unsigned char) points to next block if file is larger than 1 block
-			i += j * sizeof(MetaData) + sizeof(MetaData);
+			int nextBlock = (int)pRAM[511];
+			mMemblockDevice.readBlock(nextBlock, pRAM); //Last byte (unsigned char) points to next block if file is larger than 1 block
+			i += j;
 			j = 0;
+
 		}
 		MetaData temp;
+		memcpy(&temp, &pRAM[j], sizeof(MetaData));
 		std::string fp = mCurrentDir;
 		fp.append(temp.pName);
-		memcpy(&temp, &pRAM[j], sizeof(MetaData));
+
 		retstr += temp.pName;
 		retstr += "      ";
-		retstr += std::to_string(getSize(temp.mLocation, fp));
+		retstr += std::to_string(getSize(fp));
 		retstr += "\n";
 		j += sizeof(MetaData);
-
 	}
 	return retstr;
 }
@@ -183,20 +184,41 @@ int FileSystem::findParentLocation(int blockNr, std::string & path, int seekLeng
 	return findParentLocation(md.mLocation, newPath, md.mSize);
 }
 
-int FileSystem::getSize(int blockNr, std::string& path)
+int FileSystem::getSize(std::string path)
 {
-	return 0;
+	path = pathToAbsolutePath(path);
+	MetaData md = getMetaData(0, path);
+	
+	//If it's a file, end of recursion.
+	if (md.mType == ENUM_FILE)
+		return md.mSize;
+
+	std::string otherDir("");
+	int size = 0;
+	int dirPos = 0;
+	int startLoc = md.mLocation;
+	MetaData temp;
+	while (dirPos < md.mSize)
+	{
+		mMemblockDevice.readBlock(startLoc, pRAM);
+		memcpy(&temp, &pRAM[dirPos % (512 - sizeof(MetaData))], sizeof(MetaData));
+		otherDir = path + temp.pName;
+		size += getSize(otherDir);
+		dirPos += sizeof(MetaData);
+		if (dirPos % (512 - sizeof(MetaData)) == 0 && dirPos != 0)
+			startLoc = (unsigned char)pRAM[511];
+	}
+	return size;
 }
 
 std::string FileSystem::create(std::string filePath, filetype_t type)
 {
-	if (filePath.compare(0, 1, "/") != 0)
-		filePath = mCurrentDir + filePath;
+	filePath = pathToAbsolutePath(filePath);
 	std::vector<std::string> psplit = split(filePath, '/');
-	if (psplit[0].length() > 16)
+	if (psplit[0].length() > 15)
 		return std::string("Filenames larger than 16 characters are not supported\n");
 	//Find block where file metadata will be created
-	std::string dirpath = filePath.substr(0, filePath.size() - psplit[0].size());
+	std::string dirpath = filePath.substr(0, filePath.size() - psplit[0].size() - 1);
 	int curLoc = findLocation(0, dirpath);
 	int oldLoc = curLoc;
 	if (curLoc < 0)
@@ -210,8 +232,7 @@ std::string FileSystem::create(std::string filePath, filetype_t type)
 	}
 
 	//Check if access to write in parent dir
-	std::string tst = filePath.substr(0, filePath.size() - psplit[0].size());
-	if (!(CH_WRITE & getMetaData(0, filePath.substr(0, filePath.size() - psplit[0].size())).mRights))
+	if (!(CH_WRITE & getMetaData(0, filePath.substr(0, filePath.size() - psplit[0].size() - 1)).mRights))
 		return std::string("Access denied.\n");
 
 	//Check if file already exists
@@ -277,29 +298,18 @@ std::string FileSystem::create(std::string filePath, filetype_t type)
 
 		memset(pRAM, 0, 512);
 		memcpy(pRAM, &filedata, sizeof(MetaData));
-		std::cout << "Metadata cool written at block: " << curLoc << " Location " << 0 << "\n";
+	//	std::cout << "Metadata cool written at block: " << curLoc << " Location " << 0 << "\n";
 	}
 	else
 	{
-		std::cout << "Metadata written at block: " << curLoc << " Location " << (temp.mSize - 32) % (512 -32) << "\n";
+	//	std::cout << "Metadata written at block: " << curLoc << " Location " << (temp.mSize - 32) % (512 -32) << "\n";
 		mMemblockDevice.readBlock(curLoc, pRAM);
 		memcpy(&pRAM[(temp.mSize - 32) % (512-32)], &filedata, sizeof(MetaData));
 	}
-	std::cout << "temp.msize = " << temp.mSize << "\n";
+	
 	mMemblockDevice.writeBlock(curLoc, pRAM);
 	if (type == ENUM_FILE)
 	{
-		//Request initial data to be written to file
-		std::cout << "Enter data to be written to new file:\n";
-		std::string input("");
-		do
-		{
-			if (input.size() > 0)
-				std::cout << "File too large to be written, try again\n";
-			std::getline(std::cin, input);
-
-		} while (appendString(filePath, input) < 0);
-		
 		return std::string("New file created at ").append(filePath).append("\n");
 	}
 	else
@@ -307,14 +317,11 @@ std::string FileSystem::create(std::string filePath, filetype_t type)
 }
 
 
-std::string FileSystem::cd(std::string & dir)
+std::string FileSystem::cd(std::string  dir)
 {
-	//Check if we are already where we want to cd
-	if (std::string("/").append(dir).append("/").compare(mCurrentDir) == 0)
-		return std::string("");
+	
 	//If relative or absolute path
-	if (dir.compare(0, 1, "/") != 0)
-		dir = mCurrentDir + dir + "/";
+	dir = pathToAbsolutePath(dir);
 	//Check if it exists
 	if ( findLocation(0, dir) < 0)
 		return std::string("Directory does not exist\n");
@@ -323,6 +330,9 @@ std::string FileSystem::cd(std::string & dir)
 	if (temp.mType == ENUM_ERROR || temp.mType == ENUM_FILE)
 		return dir.append(" is not a directory.\n");
 	mCurrentDir = dir;
+	//If there's no "/" at the end of mCurrentDir, add it just for consistency
+	if (mCurrentDir.back() != '/')
+		mCurrentDir.append("/");
 	return std::string("");
 }
 
@@ -371,8 +381,7 @@ MetaData FileSystem::getMetaData(int blockNr, std::string & path, int seekLength
 std::string FileSystem::rm(std::string & path)
 {
 	//Check if relative or absolute path
-	if (path.compare(0, 1, "/") != 0)
-		path = mCurrentDir + path;
+	path = pathToAbsolutePath(path);
 
 	//Check if file/dir exists
 	if (findLocation(0, path) < 0)
@@ -394,8 +403,7 @@ int FileSystem::remove(int blockNr, std::string & path)
 int FileSystem::appendString(std::string path, std::string content)
 {
 	//Check if relative or absolute path
-	if (path.compare(0, 1, "/") != 0)
-		path = mCurrentDir + path;
+	path = pathToAbsolutePath(path);
 
 	//Find block where content will be written
 	int blockToWrite = findLocation(0, path);
@@ -449,7 +457,7 @@ int FileSystem::appendString(std::string path, std::string content)
 	md.mSize += bytesWritten;
 	//Find location of metadata to update
 	std::vector<std::string> psplit = split(path);
-	std::string dirpath = path.substr(0, path.size() - psplit[0].size());
+	std::string dirpath = path.substr(0, path.size() - psplit[0].size() - 1);
 	int metaBlock = findLocation(0, dirpath);
 	int inBlockLocation = 0;
 	MetaData comp;
@@ -469,10 +477,8 @@ int FileSystem::appendString(std::string path, std::string content)
 std::string FileSystem::append(std::string sourcefile, std::string destfile)
 {
 	//Check if relative or absolute path
-	if (sourcefile.compare(0, 1, "/") != 0)
-		sourcefile = mCurrentDir + sourcefile;
-	if (destfile.compare(0, 1, "/") != 0)
-		destfile = mCurrentDir + destfile;
+	sourcefile = pathToAbsolutePath(sourcefile);
+	destfile = pathToAbsolutePath(destfile);
 
 	//Make sure the files exist
 	if (findLocation(0, sourcefile) < 0)
@@ -511,10 +517,89 @@ std::string FileSystem::append(std::string sourcefile, std::string destfile)
 }
 
 
+std::string FileSystem::cat(std::string path)
+{
+	//Check if relative or absolute path
+	path = pathToAbsolutePath(path);
+	
+	//Check if the file exists
+	int fileLoc = findLocation(0, path);
+	if (fileLoc < 0)
+		return std::string("File not found.\n");
+
+	//Check if it is a file
+	MetaData md = getMetaData(0, path);
+	if (md.mType != ENUM_FILE)
+		return std::string(path).append(" is not a file.\n");
+	if (!(md.mRights & CH_READ))
+		return std::string("Access denied.\n");
+
+	std::string retstring("");
+	int byteCount = 0;
+	while (byteCount < md.mSize)
+	{
+		if (fileLoc < 0)
+			return std::string("cat failed, trying to access invalid block.\n");
+		mMemblockDevice.readBlock(fileLoc, pRAM);
+		int toCopy = std::min(511, md.mSize - byteCount);
+		retstring.append(pRAM, toCopy);
+		byteCount += toCopy;
+		fileLoc = (unsigned char)pRAM[511];
+	}
+	return retstring;
+}
+
+std::string FileSystem::copy(std::string source, std::string dest)
+{
+	source = pathToAbsolutePath(source);
+	dest = pathToAbsolutePath(dest);
+
+	MetaData sourceMD = getMetaData(0, source);
+	if (!(sourceMD.mRights & CH_READ))
+		return std::string("Access denied.\n");
+
+	create(dest, ENUM_FILE);
+	append(source, dest);
+	return std::string("Copied ").append(source).append(" to ").append(dest).append("\n");
+}
+
 std::string FileSystem::pwd()
 {
 	std::string ret = mCurrentDir;
 	return ret.append("\n");
+}
+
+std::string FileSystem::pathToAbsolutePath(std::string path)
+{
+	if (path.back() != '/')
+		path.append("/");
+	if (path.compare(0, 1, "/") == 0)
+		return path;
+	if (path.compare(0, 2, "./") == 0)
+		return mCurrentDir + path.substr(2,path.size());
+	if (path.compare(0, 1, ".") != 0)
+		return mCurrentDir + path;
+	
+	/* If the user tries to ../ too far, it will just go to root directory. */
+	int goParentCount = 0;
+	while (path.compare(0, 3, "../") == 0)
+	{
+		++goParentCount;
+		path = path.substr(3, path.size());
+	}
+	std::vector<std::string> ps = split(mCurrentDir, '/');
+	std::reverse(ps.begin(), ps.end());
+	std::string retpath("/");
+	for (int i = 0; i < goParentCount && ps.size() != 0; ++i)
+		ps.pop_back();
+	std::reverse(ps.begin(), ps.end());
+	for (int j = 0; j < ps.size(); ++j)
+	{
+		retpath.append(ps.back()).append("/");
+		ps.pop_back();
+	}
+	retpath.append(path);
+	return retpath;
 }
 
 void FileSystem::dumpHarddrive()

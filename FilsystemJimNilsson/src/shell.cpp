@@ -51,10 +51,22 @@ int main(void) {
 				cout << fileSystem.ls();
                 break;
             case 3: // create
+			{
 				cout << fileSystem.create(commandArr[1], ENUM_FILE);
+				//Request initial data to be written to file
+				std::cout << "Enter data to be written to new file:\n";
+				std::string input("");
+				do
+				{
+					if (input.size() > 0)
+						std::cout << "File too large to be written, try again\n";
+					std::getline(std::cin, input);
+
+				} while (fileSystem.appendString(commandArr[1], input) < 0);
+			}
                 break;
             case 4: // cat
-
+				cout << fileSystem.cat(commandArr[1]) << endl;
                 break;
             case 5: // save
 
@@ -67,7 +79,7 @@ int main(void) {
                 break;
 
             case 8: // copy
-
+				cout << fileSystem.copy(commandArr[1], commandArr[2]);
                 break;
 
             case 9: // append
