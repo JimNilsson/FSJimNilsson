@@ -29,7 +29,7 @@ public:
 
     std::string format();
 	std::string ls(); //Prints contents of current directory
-    std::string ls(std::string &path);  // optional
+    std::string ls(std::string path);  // optional
     std::string create(std::string path, filetype_t type); //Creates file or directory
 	std::string pwd();
     std::string cat(std::string path);
@@ -42,8 +42,8 @@ public:
 
     ///* Optional */
     std::string append(std::string sourcefile, std::string destfile);
-    //std::string rename(const std::string &source, const std::string &newName);
-    //std::string chmod(int permission, const std::string &file);
+    std::string rename(std::string source, std::string newName);
+    std::string chmod(chmod_t permission, std::string filepath);
 
     /* Add your own member-functions if needed */
 private:
@@ -53,6 +53,11 @@ private:
 	int remove(int blockNr, std::string& path);
 	int getSize(std::string path);
 	std::string pathToAbsolutePath(std::string path);
+	std::string rightsToText(chmod_t rights);
+	std::string trimLastSectionOfPath(std::string path);
+	int changeMetaData(std::string filepath,const MetaData& md);
+	/* returns the position of the metadata in a block*/
+	int findMetaDataInBlock(const MetaData& md, int blockNr);
 	
 };
 

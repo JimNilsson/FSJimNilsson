@@ -5,11 +5,11 @@
 using namespace std;
 
 const int MAXCOMMANDS = 8;
-const int NUMAVAILABLECOMMANDS = 16;
+const int NUMAVAILABLECOMMANDS = 17;
 
 string availableCommands[NUMAVAILABLECOMMANDS] = {
     "quit","format","ls","create","cat","save","read",
-    "rm","copy","append","rename","mkdir","cd","pwd","help","dumpblocks",
+    "rm","copy","append","rename","mkdir","cd","pwd","help","dumpblocks","chmod",
 };
 
 /* Takes usercommand from input and returns number of commands, commands are stored in strArr[] */
@@ -48,21 +48,29 @@ int main(void) {
                 break;
             case 2: // ls
                 cout << "Listing directory" << endl;
-				cout << fileSystem.ls();
+				if (nrOfCommands == 1)
+					cout << fileSystem.ls();
+				else
+					cout << fileSystem.ls(commandArr[1]);
                 break;
             case 3: // create
 			{
-				cout << fileSystem.create(commandArr[1], ENUM_FILE);
+				std::string trywrite = fileSystem.create(commandArr[1], ENUM_FILE);
+				cout << trywrite;
 				//Request initial data to be written to file
-				std::cout << "Enter data to be written to new file:\n";
-				std::string input("");
-				do
+				//But only if FileSystem::create succeeded.
+				if (trywrite.substr(0, 3).compare("New") == 0)
 				{
-					if (input.size() > 0)
-						std::cout << "File too large to be written, try again\n";
-					std::getline(std::cin, input);
+					std::cout << "Enter data to be written to new file:\n";
+					std::string input("");
+					do
+					{
+						if (input.size() > 0)
+							std::cout << "File too large to be written, try again\n";
+						std::getline(std::cin, input);
 
-				} while (fileSystem.appendString(commandArr[1], input) < 0);
+					} while (fileSystem.appendString(commandArr[1], input) < 0);
+				}
 			}
                 break;
             case 4: // cat
@@ -75,7 +83,7 @@ int main(void) {
 
                 break;
             case 7: // rm
-
+				cout << fileSystem.rm(commandArr[1]);
                 break;
 
             case 8: // copy
@@ -87,7 +95,7 @@ int main(void) {
                 break;
 
             case 10: // rename
-
+				cout << fileSystem.rename(commandArr[1], commandArr[2]);
                 break;
 
             case 11: // mkdir
@@ -108,7 +116,9 @@ int main(void) {
 			case 15: //Dump "harddrive" to file, used for debugging
 				fileSystem.dumpHarddrive();
 				break;
-
+			case 16: //chmod
+				cout << fileSystem.chmod((chmod_t)stoi(commandArr[1]), commandArr[2]);
+				break;
             default:
                 cout << "Unknown command: " << commandArr[0] << endl;
 
