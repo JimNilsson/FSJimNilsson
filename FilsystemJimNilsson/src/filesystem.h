@@ -33,8 +33,10 @@ public:
     std::string create(std::string path, filetype_t type); //Creates file or directory
 	std::string pwd();
     std::string cat(std::string path);
-    //std::string save(const std::string &saveFile) const;
-    //std::string read(const std::string &saveFile) const;
+	/* Saves an image of the harddrive */
+    std::string save(const std::string &saveFile);
+	/* Loads an image of the harddrive */
+    std::string read(const std::string &saveFile);
     std::string rm(std::string &path);
 	std::string cd(std::string dir);
 	std::string copy(std::string source, std::string dest);
@@ -50,10 +52,10 @@ private:
 	int findLocation(int blockNr, std::string& dirPath, int seekLength = sizeof(MetaData));
 	int findParentLocation(int blockNr, std::string& path, int seekLength = sizeof(MetaData));
 	MetaData getMetaData(int blockNr, std::string& dirPath, int seekLength = sizeof(MetaData));
-	int remove(int blockNr, std::string& path);
 	int getSize(std::string path);
 	std::string pathToAbsolutePath(std::string path);
 	std::string rightsToText(chmod_t rights);
+	std::string typeToText(filetype_t ftype);
 	std::string trimLastSectionOfPath(std::string path);
 	int changeMetaData(std::string filepath,const MetaData& md);
 	/* returns the position of the metadata in a block*/

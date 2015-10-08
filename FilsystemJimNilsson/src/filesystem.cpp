@@ -32,50 +32,19 @@ std::string FileSystem::format()
 
 std::string FileSystem::ls()
 {
-	std::string retstr = "./\n";
-	std::string spaces("                    ");
-	unsigned int location = findLocation(0, mCurrentDir);
-	int seekLength = getMetaData(0, mCurrentDir).mSize;
-	mMemblockDevice.readBlock(location, pRAM);
-	MetaData md;
-	memcpy(&md, pRAM, sizeof(MetaData));
-	int j = 0;
-	int i = 0;
-	while ((j + i) < seekLength)
-	{
-		if (j + sizeof(MetaData) > 510)
-		{
-			location = (unsigned char)pRAM[511]; //Last byte (unsigned char) points to next block if file is larger than 1 block
-			i += j;
-			j = 0;
-			
-		}
-		mMemblockDevice.readBlock(location, pRAM);
-		MetaData temp;
-		memcpy(&temp, &pRAM[j], sizeof(MetaData));
-		std::string fp = mCurrentDir;
-		fp.append(temp.pName).append("/");
-		
-		std::string fsize = std::to_string(getSize(fp)).append(" B");
-		std::string rights = rightsToText(temp.mRights);
-		
-		retstr += temp.pName;
-		retstr += spaces.substr(0,spaces.size() - strlen(temp.pName));
-		retstr += fsize;
-		retstr += spaces.substr(0, spaces.size() - fsize.size() - 8);
-		retstr += rights;
-		retstr += "\n";
-		j += sizeof(MetaData);
-	}
-	return retstr;
+	return ls(mCurrentDir);
 }
 
 std::string FileSystem::ls(std::string path)
 {
-	std::string retstr = "./\n";
-	std::string spaces("                    ");
 	path = pathToAbsolutePath(path);
-	unsigned int location = findLocation(0, path);
+	std::string retstr = "./\n";
+	if (path.compare("/") != 0)
+		retstr.append("../\n");
+	std::string spaces("                    ");
+	int location = findLocation(0, path);
+	if (location < 0)
+		return std::string("Invalid path.\n");
 	int seekLength = getMetaData(0, path).mSize;
 	mMemblockDevice.readBlock(location, pRAM);
 	MetaData md;
@@ -99,17 +68,21 @@ std::string FileSystem::ls(std::string path)
 
 		std::string fsize = std::to_string(getSize(fp)).append(" B");
 		std::string rights = rightsToText(temp.mRights);
+		std::string ftype = typeToText(temp.mType);
 
 		retstr += temp.pName;
 		retstr += spaces.substr(0, spaces.size() - strlen(temp.pName));
 		retstr += fsize;
-		retstr += spaces.substr(0, spaces.size() - fsize.size() - 8);
+		retstr += spaces.substr(0, spaces.size() - fsize.size() - 12);
 		retstr += rights;
+		retstr += spaces.substr(0, spaces.size() - rights.size() - 12);
+		retstr += ftype;
 		retstr += "\n";
 		j += sizeof(MetaData);
 	}
 	return retstr;
 }
+
 
 int FileSystem::findLocation(int blockNr, std::string& dirPath, int seekLength)
 {
@@ -444,11 +417,15 @@ std::string FileSystem::rm(std::string & path)
 	int loc = fileLoc;
 	while (loc != 0)
 	{
+		mMemblockDevice.readBlock(249, pRAM);
+		pRAM[loc] = 0;
+		mMemblockDevice.writeBlock(249, pRAM);
 		mMemblockDevice.readBlock(loc, pRAM);
-		int temploc = pRAM[511];
+		int temploc = (unsigned char)pRAM[511];
 		memset(pRAM, 0, 512);
 		mMemblockDevice.writeBlock(loc, pRAM);
 		loc = temploc;
+		
 	}
 
 	//Now we need to update the metadata of the directory that kept the file
@@ -499,12 +476,6 @@ int FileSystem::findMetaDataInBlock(const MetaData & md, int blockNr)
 	return inBlockLocation;
 }
 
-int FileSystem::remove(int blockNr, std::string & path)
-{
-	std::vector<std::string> fnames = split(path, '/');
-
-	return 0;
-}
 
 /* Appends string content to end of file pointed to by filePath */
 int FileSystem::appendString(std::string path, std::string content)
@@ -529,15 +500,19 @@ int FileSystem::appendString(std::string path, std::string content)
 	if (!(md.mRights & CH_WRITE))
 		return -1;
 	int freeSpace = mMemblockDevice.spaceLeft() * 511; //Only 511 usable bytes per block due to last one being reserved for pointer to next block if there is one
-	if (content.size() > (511 - md.mSize) + freeSpace)
+	if (content.size() > (511 - (md.mSize % 511)) + freeSpace)
 		return -1;
 
 	//Write the data
 	int initialWrite = std::min(511 - (md.mSize % 511), (int)content.size());
-	mMemblockDevice.readBlock(blockToWrite, pRAM);
-	memcpy(&pRAM[md.mSize % 511], content.c_str(), initialWrite);
-	mMemblockDevice.writeBlock(blockToWrite, pRAM);
-	int bytesWritten = initialWrite;
+	int bytesWritten = 0;
+	if (md.mSize == 0 || (initialWrite > 0 && md.mSize % 511 != 0))
+	{
+		mMemblockDevice.readBlock(blockToWrite, pRAM);
+		memcpy(&pRAM[md.mSize % 511], content.c_str(), initialWrite);
+		mMemblockDevice.writeBlock(blockToWrite, pRAM);
+		bytesWritten = initialWrite;
+	}
 	while (bytesWritten < content.size())
 	{
 		//If there's more data to write we need to allocate a new block.		
@@ -550,7 +525,7 @@ int FileSystem::appendString(std::string path, std::string content)
 		mMemblockDevice.writeBlock(249, pRAM);
 		//Make previous block point to the new block at th end
 		mMemblockDevice.readBlock(blockToWrite, pRAM);
-		pRAM[511] = newBlock; //Point to new block
+		pRAM[511] = (unsigned char)newBlock; //Point to new block
 		mMemblockDevice.writeBlock(blockToWrite, pRAM);
 
 		//Write data to new block
@@ -567,15 +542,8 @@ int FileSystem::appendString(std::string path, std::string content)
 	//Find location of metadata to update
 	std::string dirpath = trimLastSectionOfPath(path);
 	int metaBlock = findLocation(0, dirpath);
-	int inBlockLocation = 0;
-	MetaData comp;
+	int inBlockLocation = findMetaDataInBlock(md,metaBlock);
 	mMemblockDevice.readBlock(metaBlock, pRAM);
-	memcpy(&comp, pRAM, sizeof(MetaData));
-	while (strcmp(md.pName, comp.pName) != 0)
-	{
-		inBlockLocation += 32;
-		memcpy(&comp, &pRAM[inBlockLocation], sizeof(MetaData));
-	}
 	memcpy(&pRAM[inBlockLocation], &md, sizeof(MetaData));
 	mMemblockDevice.writeBlock(metaBlock, pRAM);
 
@@ -614,14 +582,19 @@ std::string FileSystem::append(std::string sourcefile, std::string destfile)
 		return std::string("File missing.\n");
 	
 
-	//Find size of files
+	//Find metadata of files
 	MetaData sourceMetaData = getMetaData(0, sourcefile);
 	MetaData destMetaData = getMetaData(0, destfile);
+	//Make sure they are files
 	if (sourceMetaData.mType != ENUM_FILE || destMetaData.mType != ENUM_FILE)
 		return std::string("append only works on files, not directories.\n");
 	//Make sure we have permission
 	if (!(sourceMetaData.mRights & CH_READ) || !(destMetaData.mRights & CH_WRITE))
 		return std::string("Access denied.\n");
+	//Make sure there's enough space on hard drive
+	int fs = mMemblockDevice.spaceLeft() * 511;
+	if (mMemblockDevice.spaceLeft() * 511 < sourceMetaData.mSize)
+		return std::string("Not enough space left.\n");
 	int blockToRead = sourceMetaData.mLocation;
 	int bytesToWrite = sourceMetaData.mSize;
 	int bytesWritten = 0;
@@ -681,12 +654,17 @@ std::string FileSystem::cat(std::string path)
 
 std::string FileSystem::copy(std::string source, std::string dest)
 {
+	if (dest.size() == 0)
+		return std::string("Missing name.\n");
 	source = pathToAbsolutePath(source);
 	dest = pathToAbsolutePath(dest);
 
 	MetaData sourceMD = getMetaData(0, source);
 	if (!(sourceMD.mRights & CH_READ))
 		return std::string("Access denied.\n");
+
+	if (sourceMD.mType != ENUM_FILE)
+		return std::string("Only files can be copied.\n");
 
 	create(dest, ENUM_FILE);
 	append(source, dest);
@@ -732,6 +710,40 @@ std::string FileSystem::pathToAbsolutePath(std::string path)
 	return retpath;
 }
 
+std::string FileSystem::save(const std::string & saveFile) 
+{
+	std::ofstream out;
+	out.open(saveFile.c_str(), std::ios::out | std::ios::trunc);
+	if (!out.is_open())
+		return std::string("Failed to open file.\n");
+	for (int i = 0; i < 250; ++i)
+	{
+		
+		mMemblockDevice.readBlock(i, pRAM);
+		out.write(pRAM, 512);
+	}
+	out.close();
+	
+	return std::string("Saved image of harddrive to ").append(saveFile).append("\n");
+}
+
+std::string FileSystem::read(const std::string & saveFile)
+{
+	std::ifstream in;
+	in.open(saveFile.c_str(), std::ios::in | std::ios::binary);
+	if (!in.is_open())
+		return std::string("Failed to open file.\n");
+	for (int i = 0; i < 250; ++i)
+	{
+		in.read(pRAM, 512);
+		mMemblockDevice.writeBlock(i, pRAM);
+	}
+	in.close();
+	mCurrentDir = "/";
+	return std::string("Hard drive image loaded.\n");
+}
+
+/*Used for debugging purposes*/
 void FileSystem::dumpHarddrive()
 {
 	FILE* f;
@@ -770,8 +782,6 @@ void FileSystem::dumpHarddrive()
 	}
 	fclose(d);
 	fclose(f);
-
-
 }
 
 std::string FileSystem::rightsToText(chmod_t rights)
@@ -782,6 +792,14 @@ std::string FileSystem::rightsToText(chmod_t rights)
 	if (rights & CH_WRITE)
 		retstr.append("W");
 	return retstr;
+}
+
+std::string FileSystem::typeToText(filetype_t ftype)
+{
+	if (ftype == ENUM_FILE)
+		return std::string("File");
+	else
+		return std::string("Directory");
 }
 
 std::string FileSystem::trimLastSectionOfPath(std::string path)

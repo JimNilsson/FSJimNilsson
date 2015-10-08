@@ -77,10 +77,10 @@ int main(void) {
 				cout << fileSystem.cat(commandArr[1]) << endl;
                 break;
             case 5: // save
-
+				cout << fileSystem.save(commandArr[1]);
                 break;
             case 6: // read
-
+				cout << fileSystem.read(commandArr[1]);
                 break;
             case 7: // rm
 				cout << fileSystem.rm(commandArr[1]);
@@ -117,7 +117,13 @@ int main(void) {
 				fileSystem.dumpHarddrive();
 				break;
 			case 16: //chmod
-				cout << fileSystem.chmod((chmod_t)stoi(commandArr[1]), commandArr[2]);
+				try {
+					cout << fileSystem.chmod((chmod_t)stoi(commandArr[1]), commandArr[2]);
+				}
+				catch (std::invalid_argument)
+				{
+					cout << "Invalid argument supplied.\n";
+				}
 				break;
             default:
                 cout << "Unknown command: " << commandArr[0] << endl;
