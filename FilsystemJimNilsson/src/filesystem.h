@@ -52,6 +52,7 @@ private:
 	int findLocation(int blockNr, std::string& dirPath, int seekLength = sizeof(MetaData));
 	int findParentLocation(int blockNr, std::string& path, int seekLength = sizeof(MetaData));
 	MetaData getMetaData(int blockNr, std::string& dirPath, int seekLength = sizeof(MetaData));
+	int findMetaDataLocation(int blockNr, std::string path, int seekLength = sizeof(MetaData));
 	int getSize(std::string path);
 	std::string pathToAbsolutePath(std::string path);
 	std::string rightsToText(chmod_t rights);

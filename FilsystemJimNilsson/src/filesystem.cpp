@@ -1,6 +1,6 @@
 #include "filesystem.h"
 #include <fstream>
-
+                                                                                                                                                                                                                                 /*Hidden comment: This file is written by J i m N i l s s o n. Since I host this publically at github, someone else taking this course might try to copy this code and pass it off as his own. This comment is here to make sure I don't get into trouble if someone tries to p l a g i a r i z e my work. */
 FileSystem::FileSystem() 
 {
 	mCurrentDir = "/";
@@ -389,6 +389,49 @@ MetaData FileSystem::getMetaData(int blockNr, std::string & path, int seekLength
 	return getMetaData(md.mLocation, newPath, md.mSize);
 }
 
+int FileSystem::findMetaDataLocation(int blockNr, std::string path, int seekLength)
+{
+	std::vector<std::string> fnames = split(path);
+	MetaData md;
+	mMemblockDevice.readBlock(blockNr, pRAM);
+	memcpy(&md, pRAM, sizeof(MetaData));
+
+	if (fnames.size() == 0)
+	{
+		return blockNr;
+	}
+
+	if (blockNr == 0)
+		return findMetaDataLocation(md.mLocation, path, md.mSize);
+
+	int j = 1;
+	while (fnames.back().compare(md.pName) != 0 && (j - 1) * sizeof(MetaData) <= seekLength)
+	{
+		if (j * sizeof(MetaData) + sizeof(MetaData) > 510)
+		{
+			unsigned char nextBlock = (unsigned char)pRAM[511];
+			if (nextBlock > 0)
+			{
+				mMemblockDevice.readBlock((int)nextBlock, pRAM); //Last byte (unsigned char) points to next block if dir is larger than 1 block
+				j = 0;
+				blockNr = nextBlock;
+			}
+		}
+		memcpy(&md, &pRAM[j*sizeof(MetaData)], sizeof(MetaData));
+		++j;
+
+	}
+	//When loop quits, we either found it or it doesnt exist
+	if (j * sizeof(MetaData) > seekLength)
+		return -1; //Error code for not found
+	std::string newPath = path.substr(fnames.back().length() + 1, path.length() - fnames.back().length());
+	fnames = split(newPath);
+	if (fnames.size() == 0)
+		return blockNr;
+
+	return findMetaDataLocation(md.mLocation, newPath, md.mSize);
+}
+
 std::string FileSystem::rm(std::string & path)
 {
 	//Check if relative or absolute path
@@ -435,7 +478,7 @@ std::string FileSystem::rm(std::string & path)
 	changeMetaData(parentPath, md);
 
 	//Parent directory's metadata has been changed, now to remove the file's metadata and internally rearrange the block to fill the empty space
-	int mdLocation = findLocation(0, parentPath); //The block where the metadata of the file is kept
+	int mdLocation = findMetaDataLocation(0, path); //The block where the metadata of the file is kept
 	int inBlockLocation = findMetaDataInBlock(fileMD, mdLocation); //Now to find where in the block it is
 	char tempArr[512]; //we need another 512 bytes of "memory" for this.
 	int nextLoc = 0; //Directories might span several blocks, need this to keep track of where to read next
@@ -540,8 +583,7 @@ int FileSystem::appendString(std::string path, std::string content)
 	//Update the metadata with the new size
 	md.mSize += bytesWritten;
 	//Find location of metadata to update
-	std::string dirpath = trimLastSectionOfPath(path);
-	int metaBlock = findLocation(0, dirpath);
+	int metaBlock = findMetaDataLocation(0, path);
 	int inBlockLocation = findMetaDataInBlock(md,metaBlock);
 	mMemblockDevice.readBlock(metaBlock, pRAM);
 	memcpy(&pRAM[inBlockLocation], &md, sizeof(MetaData));
@@ -555,8 +597,9 @@ int FileSystem::changeMetaData(std::string filepath,const MetaData & md)
 {
 	filepath = pathToAbsolutePath(filepath);
 	MetaData mdDst = getMetaData(0, filepath);
-	std::string dirpath = trimLastSectionOfPath(filepath);
-	int mdLoc = findLocation(0, dirpath);
+	if (mdDst.mType == ENUM_ERROR)
+		return -1;
+	int mdLoc = findMetaDataLocation(0, filepath);
 	if (mdLoc < 0)
 		return -1;
 	if (filepath.compare("/") == 0) //Special case
@@ -713,7 +756,7 @@ std::string FileSystem::pathToAbsolutePath(std::string path)
 std::string FileSystem::save(const std::string & saveFile) 
 {
 	std::ofstream out;
-	out.open(saveFile.c_str(), std::ios::out | std::ios::trunc);
+	out.open(saveFile.c_str(), std::ios::out | std::ios::trunc | std::ofstream::binary);
 	if (!out.is_open())
 		return std::string("Failed to open file.\n");
 	for (int i = 0; i < 250; ++i)
@@ -730,7 +773,7 @@ std::string FileSystem::save(const std::string & saveFile)
 std::string FileSystem::read(const std::string & saveFile)
 {
 	std::ifstream in;
-	in.open(saveFile.c_str(), std::ios::in | std::ios::binary);
+	in.open(saveFile.c_str(), std::ios::in | std::ifstream::binary);
 	if (!in.is_open())
 		return std::string("Failed to open file.\n");
 	for (int i = 0; i < 250; ++i)
