@@ -320,6 +320,8 @@ std::string FileSystem::cd(std::string  dir)
 
 std::string FileSystem::chmod(chmod_t permission, std::string filepath)
 {
+	if (permission != CH_READ && permission != CH_WRITE && permission != CH_ALL && permission != CH_NONE)
+		return std::string("Invalid permission. Permitted values are 0 = NONE, 2 = READ, 4 = WRITE, 6 = READ/WRITE.\n");
 	filepath = pathToAbsolutePath(filepath);
 	int mdlocation = findParentLocation(0, filepath);
 	if (mdlocation < 0)
@@ -340,6 +342,10 @@ std::string FileSystem::rename(std::string source, std::string newName)
 		return std::string("File not found.\n");
 	if (newName.size() > 15)
 		return std::string("File names longer than 16 characters are not allowed.\n");
+	//Make sure the new name isnt already a name of a file in same directory
+	std::string newPath = pathToAbsolutePath(trimLastSectionOfPath(source).append(newName));
+	if (findLocation(0, newPath) >= 0)
+		return std::string("A file with that name already exists.\n");
 	MetaData md = getMetaData(0, source);
 	strcpy_s(md.pName, newName.c_str());
 	if (changeMetaData(source, md) < 0)
@@ -471,13 +477,7 @@ std::string FileSystem::rm(std::string & path)
 		
 	}
 
-	//Now we need to update the metadata of the directory that kept the file
-	std::string parentPath = trimLastSectionOfPath(path);
-	MetaData md = getMetaData(0,parentPath);
-	md.mSize -= sizeof(MetaData);
-	changeMetaData(parentPath, md);
-
-	//Parent directory's metadata has been changed, now to remove the file's metadata and internally rearrange the block to fill the empty space
+	//Remove the file's metadata and internally rearrange the block to fill the empty space
 	int mdLocation = findMetaDataLocation(0, path); //The block where the metadata of the file is kept
 	int inBlockLocation = findMetaDataInBlock(fileMD, mdLocation); //Now to find where in the block it is
 	char tempArr[512]; //we need another 512 bytes of "memory" for this.
@@ -499,6 +499,13 @@ std::string FileSystem::rm(std::string & path)
 		inBlockLocation = 0;
 		mdLocation = nextLoc;
 	} while (nextLoc != 0);
+
+	//Now we need to update the metadata of the directory that kept the file
+	std::string parentPath = trimLastSectionOfPath(path);
+	MetaData md = getMetaData(0, parentPath);
+	md.mSize -= sizeof(MetaData);
+	changeMetaData(parentPath, md);
+
 	return std::string("File has been deleted.\n");
 }
 

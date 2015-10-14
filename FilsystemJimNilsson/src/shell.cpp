@@ -195,6 +195,8 @@ string help() {
     helpStr += "* rename <old-file>  <new-file>:    Renames <old-file> to <new-file>\n";
     helpStr += "* mkdir  <directory>:               Creates a new directory called <directory>\n";
     helpStr += "* cd     <directory>:               Changes current working directory to <directory>\n";
+	helpStr += "* chmod  <permission> <file>:       Changes permission. 0=NONE,2=R,4=W,6=RW\n";
+	helpStr += "* dumpblocks:                       Dumps HD to datadump.txt and rawdatadump.txt\n";
     helpStr += "* pwd:                              Get current working directory\n";
     helpStr += "* help:                             Prints this help screen\n";
     return helpStr;
