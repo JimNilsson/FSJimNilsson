@@ -340,6 +340,8 @@ std::string FileSystem::rename(std::string source, std::string newName)
 	source = pathToAbsolutePath(source);
 	if (findLocation(0, source) < 0)
 		return std::string("File not found.\n");
+	if(newName.find('/') < newName.npos)
+		return std::string("Illegal name.\n");
 	if (newName.size() > 15)
 		return std::string("File names longer than 16 characters are not allowed.\n");
 	//Make sure the new name isnt already a name of a file in same directory
@@ -708,7 +710,8 @@ std::string FileSystem::copy(std::string source, std::string dest)
 		return std::string("Missing name.\n");
 	source = pathToAbsolutePath(source);
 	dest = pathToAbsolutePath(dest);
-
+	if (findLocation(0, dest) > 0)
+		return std::string("File already exists.\n");
 	MetaData sourceMD = getMetaData(0, source);
 	if (!(sourceMD.mRights & CH_READ))
 		return std::string("Access denied.\n");
