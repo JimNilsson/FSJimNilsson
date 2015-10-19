@@ -14,12 +14,12 @@ class FileSystem
 private:
     MemBlockDevice mMemblockDevice;
 	char pRAM[512]; //helpful for loading blocks into "memory"
-	std::string mCurrentDir;
+	
 	
     // Here you can add your own data structures
 public:
     FileSystem();
-
+	std::string mCurrentDir;
     /* These commands needs to implemented */
     /*
      * However, feel free to change the signatures, these are just examples.
@@ -46,7 +46,7 @@ public:
     std::string append(std::string sourcefile, std::string destfile);
     std::string rename(std::string source, std::string newName);
     std::string chmod(chmod_t permission, std::string filepath);
-
+	std::string getCurrentDir() { return mCurrentDir; }//cd is equivalent of setcurrentdir
     /* Add your own member-functions if needed */
 private:
 	int findLocation(int blockNr, std::string& dirPath, int seekLength = sizeof(MetaData));

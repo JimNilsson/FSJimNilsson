@@ -104,6 +104,7 @@ int main(void) {
 
             case 12: // cd
 				cout << fileSystem.cd(commandArr[1]);
+				currentDir = fileSystem.getCurrentDir();
                 break;
 
             case 13: // pwd
