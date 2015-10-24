@@ -10,21 +10,17 @@ FileSystem::FileSystem()
 
 std::string FileSystem::format()
 {
-	MetaData rootDir = MetaData(ENUM_DIRECTORY, "/", 1, 0, (chmod_t)(CH_ALL));
 	memset(pRAM, 0, 512);
-	memcpy(pRAM, &rootDir, sizeof(MetaData));
-	mMemblockDevice.writeBlock(0, pRAM);
-	
-	memset(pRAM, 0, 512);
-	for (int i = 1; i < 249; ++i)
+	for (int i = 0; i < 250; ++i)
 	{
 		mMemblockDevice.writeBlock(i, pRAM);
 	}
+	MetaData rootDir = MetaData(TYPE_DIRECTORY, "/", 1, 0, (chmod_t)(CH_ALL));
 	memset(pRAM, 0, 512);
-	pRAM[0] = 1;
-	pRAM[1] = 1;
-	pRAM[249] = 1;
-	mMemblockDevice.writeBlock(249, pRAM); //Last block is reserved for checking which blocks are free
+	memcpy(pRAM, &rootDir, sizeof(MetaData));
+	pRAM[0 + sizeof(MetaData)] = 1;
+	pRAM[1 + sizeof(MetaData)] = 1;
+	mMemblockDevice.writeBlock(0, pRAM);
 	
 	mCurrentDir = "/";
 	return std::string("Disk formatted.\n");
@@ -119,7 +115,7 @@ int FileSystem::findLocation(int blockNr, std::string& dirPath, int seekLength)
 	if (j * sizeof(MetaData) > seekLength)
 		return -1; //Error code for not found
 	std::string newPath = dirPath.substr(fnames.back().length() + 1, dirPath.length() - fnames.back().length());
-	if (md.mType == ENUM_DIRECTORY)
+	if (md.mType == TYPE_DIRECTORY)
 		return findLocation(md.mLocation, newPath, md.mSize);
 	else
 		return md.mLocation;
@@ -176,7 +172,7 @@ int FileSystem::getSize(std::string path)
 	MetaData md = getMetaData(0, path);
 	
 	//If it's a file, end of recursion.
-	if (md.mType == ENUM_FILE)
+	if (md.mType == TYPE_FILE)
 		return md.mSize;
 
 	std::string otherDir("");
@@ -251,9 +247,9 @@ std::string FileSystem::create(std::string filePath, filetype_t type)
 	mMemblockDevice.writeBlock(parentBlock, pRAM);
 
 	//Mark the block where file will reside as occupied first
-	mMemblockDevice.readBlock(249, pRAM);
-	pRAM[newFileBlock] = 1;
-	mMemblockDevice.writeBlock(249, pRAM);
+	mMemblockDevice.readBlock(0, pRAM);
+	pRAM[newFileBlock + sizeof(MetaData)] = 1;
+	mMemblockDevice.writeBlock(0, pRAM);
 
 	//MetaData to be written into directory
 	MetaData filedata = MetaData(type, psplit.front(), newFileBlock, 0, CH_ALL);
@@ -266,9 +262,9 @@ std::string FileSystem::create(std::string filePath, filetype_t type)
 		if (parentBlock < 0)
 		{
 			//If fail, unreserve the block where the file would have resided
-			mMemblockDevice.readBlock(249, pRAM);
-			pRAM[newFileBlock] = 0;
-			mMemblockDevice.writeBlock(249, pRAM);
+			mMemblockDevice.readBlock(0, pRAM);
+			pRAM[newFileBlock + sizeof(MetaData)] = 0;
+			mMemblockDevice.writeBlock(0, pRAM);
 			return std::string("No free blocks.\n");
 		}
 
@@ -290,7 +286,7 @@ std::string FileSystem::create(std::string filePath, filetype_t type)
 	}
 	
 	mMemblockDevice.writeBlock(curLoc, pRAM);
-	if (type == ENUM_FILE)
+	if (type == TYPE_FILE)
 	{
 		return std::string("New file created at ").append(filePath).append("\n");
 	}
@@ -309,7 +305,7 @@ std::string FileSystem::cd(std::string  dir)
 		return std::string("Directory does not exist\n");
 	//Make sure the user doesn't try to cd into a file
 	MetaData temp = getMetaData(0, dir);
-	if (temp.mType == ENUM_ERROR || temp.mType == ENUM_FILE)
+	if (temp.mType == TYPE_ERROR || temp.mType == TYPE_FILE)
 		return dir.append(" is not a directory.\n");
 	mCurrentDir = dir;
 	//If there's no "/" at the end of mCurrentDir, add it for consistency
@@ -327,7 +323,7 @@ std::string FileSystem::chmod(chmod_t permission, std::string filepath)
 	if (mdlocation < 0)
 		return std::string("File not found.\n");
 	MetaData md = getMetaData(0, filepath);
-	if (md.mType != ENUM_FILE)
+	if (md.mType != TYPE_FILE)
 		return std::string("Permissions are only for files, not directories.\n");
 	md.mRights = permission;
 	if (changeMetaData(filepath, md) < 0)
@@ -388,7 +384,7 @@ MetaData FileSystem::getMetaData(int blockNr, std::string & path, int seekLength
 	}
 	//When loop quits, we either found it or it doesnt exist
 	if (j * sizeof(MetaData) > seekLength)
-		return MetaData(ENUM_ERROR, "", -1, -1, CH_ALL); //Error code for not found
+		return MetaData(TYPE_ERROR, "", -1, -1, CH_ALL); //Error code for not found
 	std::string newPath = path.substr(fnames.back().length() + 1, path.length() - fnames.back().length());
 	fnames = split(newPath);
 	if (fnames.size() == 0)
@@ -461,16 +457,16 @@ std::string FileSystem::rm(std::string & path)
 	if (!(fileMD.mRights & CH_WRITE))
 		return std::string("Access denied.\n");
 	//Only files and empty directories are allowed to be removed
-	if (fileMD.mType == ENUM_DIRECTORY && fileMD.mSize != 0)
+	if (fileMD.mType == TYPE_DIRECTORY && fileMD.mSize != 0)
 		return std::string("Only files and empty directories can be removed.\n");
 
 	//Mark the blocks as free again. Also fill them with zeroes for secure deletion.
 	int loc = fileLoc;
 	while (loc != 0)
 	{
-		mMemblockDevice.readBlock(249, pRAM);
-		pRAM[loc] = 0;
-		mMemblockDevice.writeBlock(249, pRAM);
+		mMemblockDevice.readBlock(0, pRAM);
+		pRAM[loc + sizeof(MetaData)] = 0;
+		mMemblockDevice.writeBlock(0, pRAM);
 		mMemblockDevice.readBlock(loc, pRAM);
 		int temploc = (unsigned char)pRAM[511];
 		memset(pRAM, 0, 512);
@@ -572,9 +568,9 @@ int FileSystem::appendString(std::string path, std::string content)
 		if (newBlock < 0)
 			return -1;
 		//Mark new block as occupied
-		mMemblockDevice.readBlock(249, pRAM);
-		pRAM[newBlock] = 1;
-		mMemblockDevice.writeBlock(249, pRAM);
+		mMemblockDevice.readBlock(0, pRAM);
+		pRAM[newBlock + sizeof(MetaData)] = 1;
+		mMemblockDevice.writeBlock(0, pRAM);
 		//Make previous block point to the new block at th end
 		mMemblockDevice.readBlock(blockToWrite, pRAM);
 		pRAM[511] = (unsigned char)newBlock; //Point to new block
@@ -606,7 +602,7 @@ int FileSystem::changeMetaData(std::string filepath,const MetaData & md)
 {
 	filepath = pathToAbsolutePath(filepath);
 	MetaData mdDst = getMetaData(0, filepath);
-	if (mdDst.mType == ENUM_ERROR)
+	if (mdDst.mType == TYPE_ERROR)
 		return -1;
 	int mdLoc = findMetaDataLocation(0, filepath);
 	if (mdLoc < 0)
@@ -638,7 +634,7 @@ std::string FileSystem::append(std::string sourcefile, std::string destfile)
 	MetaData sourceMetaData = getMetaData(0, sourcefile);
 	MetaData destMetaData = getMetaData(0, destfile);
 	//Make sure they are files
-	if (sourceMetaData.mType != ENUM_FILE || destMetaData.mType != ENUM_FILE)
+	if (sourceMetaData.mType != TYPE_FILE || destMetaData.mType != TYPE_FILE)
 		return std::string("append only works on files, not directories.\n");
 	//Make sure we have permission
 	if (!(sourceMetaData.mRights & CH_READ) || !(destMetaData.mRights & CH_WRITE))
@@ -684,7 +680,7 @@ std::string FileSystem::cat(std::string path)
 
 	//Check if it is a file
 	MetaData md = getMetaData(0, path);
-	if (md.mType != ENUM_FILE)
+	if (md.mType != TYPE_FILE)
 		return std::string(path).append(" is not a file.\n");
 	if (!(md.mRights & CH_READ))
 		return std::string("Access denied.\n");
@@ -716,10 +712,10 @@ std::string FileSystem::copy(std::string source, std::string dest)
 	if (!(sourceMD.mRights & CH_READ))
 		return std::string("Access denied.\n");
 
-	if (sourceMD.mType != ENUM_FILE)
+	if (sourceMD.mType != TYPE_FILE)
 		return std::string("Only files can be copied.\n");
 
-	create(dest, ENUM_FILE);
+	create(dest, TYPE_FILE);
 	append(source, dest);
 	return std::string("Copied ").append(source).append(" to ").append(dest).append("\n");
 }
@@ -849,7 +845,7 @@ std::string FileSystem::rightsToText(chmod_t rights)
 
 std::string FileSystem::typeToText(filetype_t ftype)
 {
-	if (ftype == ENUM_FILE)
+	if (ftype == TYPE_FILE)
 		return std::string("File");
 	else
 		return std::string("Directory");

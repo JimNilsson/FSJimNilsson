@@ -4,7 +4,7 @@
 #include <iostream>
 
 enum chmod_t : int { CH_READ = 2, CH_WRITE = 4, CH_ALL = 6, CH_NONE = 0 };
-enum filetype_t : int { ENUM_DIRECTORY = 1, ENUM_FILE = 2, ENUM_ERROR = -1 };
+enum filetype_t : int { TYPE_DIRECTORY = 1, TYPE_FILE = 2, TYPE_ERROR = -1 };
 struct MetaData
 {
 	MetaData()

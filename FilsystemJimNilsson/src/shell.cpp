@@ -55,7 +55,7 @@ int main(void) {
                 break;
             case 3: // create
 			{
-				std::string trywrite = fileSystem.create(commandArr[1], ENUM_FILE);
+				std::string trywrite = fileSystem.create(commandArr[1], TYPE_FILE);
 				cout << trywrite;
 				//Request initial data to be written to file
 				//But only if FileSystem::create succeeded.
@@ -81,6 +81,7 @@ int main(void) {
                 break;
             case 6: // read
 				cout << fileSystem.read(commandArr[1]);
+				currentDir = fileSystem.getCurrentDir();
                 break;
             case 7: // rm
 				cout << fileSystem.rm(commandArr[1]);
@@ -99,7 +100,7 @@ int main(void) {
                 break;
 
             case 11: // mkdir
-				cout << fileSystem.create(commandArr[1], ENUM_DIRECTORY);
+				cout << fileSystem.create(commandArr[1], TYPE_DIRECTORY);
                 break;
 
             case 12: // cd

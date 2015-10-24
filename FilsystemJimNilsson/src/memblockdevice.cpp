@@ -1,4 +1,5 @@
 #include "memblockdevice.h"
+#include "MetaData.h"
 #include <stdexcept>
 
 MemBlockDevice::MemBlockDevice(int nrOfBlocks): BlockDevice(nrOfBlocks) {
@@ -36,9 +37,9 @@ Block& MemBlockDevice::operator[](int index) const {
 
 /* Returns number of unallocated blocks */
 int MemBlockDevice::spaceLeft() const {
-	std::string blocks = readBlock(249).toString();
+	std::string blocks = readBlock(0).toString();
 	int freeBlocks = 0;
-	for (int i = 0; i < 249; ++i)
+	for (int i = sizeof(MetaData); i < 250 + sizeof(MetaData); ++i)
 	{
 		if (blocks[i] == 0)
 			++freeBlocks;
@@ -108,11 +109,11 @@ int MemBlockDevice::size() const {
 
 int MemBlockDevice::findFreeBlock()
 {
-	std::string freeIndex = this->memBlocks[249].toString();
-	for (int i = 0; i < nrOfBlocks - 1; ++i)
+	std::string freeIndex = this->memBlocks[0].toString();
+	for (int i = sizeof(MetaData); i < nrOfBlocks - 1 + sizeof(MetaData); ++i)
 	{
 		if (freeIndex[i] == 0)
-			return i;
+			return i - sizeof(MetaData);
 	}
 	//If no free block was found, return -1
 	return -1;
