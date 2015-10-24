@@ -84,7 +84,10 @@ int main(void) {
 				currentDir = fileSystem.getCurrentDir();
                 break;
             case 7: // rm
-				cout << fileSystem.rm(commandArr[1]);
+				if (commandArr[1].compare("-rf") == 0)
+					cout << fileSystem.rmrf(commandArr[2]);
+				else
+					cout << fileSystem.rm(commandArr[1]);
                 break;
 
             case 8: // copy

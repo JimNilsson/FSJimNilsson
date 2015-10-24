@@ -34,10 +34,10 @@ std::string FileSystem::ls()
 std::string FileSystem::ls(std::string path)
 {
 	path = pathToAbsolutePath(path);
-	std::string retstr = "./\n";
-	if (path.compare("/") != 0)
+	std::string retstr = "./\n"; // ./ is always there
+	if (path.compare("/") != 0) //if we are not in root, we can always go back (../)
 		retstr.append("../\n");
-	std::string spaces("                    ");
+	std::string spaces("                    "); //Used for formatting
 	int location = findLocation(0, path);
 	if (location < 0)
 		return std::string("Invalid path.\n");
@@ -193,6 +193,31 @@ int FileSystem::getSize(std::string path)
 	return size;
 }
 
+std::string FileSystem::rmrf(std::string path)
+{
+	path = pathToAbsolutePath(path);
+	MetaData md = getMetaData(0, path);
+	if (md.mType == TYPE_FILE)
+		return rm(path);
+	
+	std::string otherDir("");
+	int dirPos = 0;
+	int startLoc = md.mLocation;
+	MetaData temp;
+	while (dirPos < md.mSize)
+	{
+		mMemblockDevice.readBlock(startLoc, pRAM);
+		memcpy(&temp, &pRAM[dirPos % (512 - sizeof(MetaData))], sizeof(MetaData));
+		otherDir = path + temp.pName;
+		rmrf(otherDir);
+		dirPos += sizeof(MetaData);
+		if (dirPos % (512 - sizeof(MetaData)) == 0 && dirPos != 0)
+			startLoc = (unsigned char)pRAM[511];
+	}
+	rm(path);
+	return std::string("Recursively deleted.\n");
+}
+
 std::string FileSystem::create(std::string filePath, filetype_t type)
 {
 	filePath = pathToAbsolutePath(filePath);
@@ -255,7 +280,7 @@ std::string FileSystem::create(std::string filePath, filetype_t type)
 	MetaData filedata = MetaData(type, psplit.front(), newFileBlock, 0, CH_ALL);
 
 	//If the metadata cant fit in the directory, we need to expand the directory to another block
-	if (((temp.mSize - 32) / 32) % 15 == 0 && temp.mSize != 32)
+	if (((temp.mSize - 32) / 32) % 15 == 0 && temp.mSize != 32) //32 is size of metadata
 	{
 		int oldBlock = parentBlock;
 		parentBlock = mMemblockDevice.findFreeBlock();
@@ -458,7 +483,7 @@ std::string FileSystem::rm(std::string & path)
 		return std::string("Access denied.\n");
 	//Only files and empty directories are allowed to be removed
 	if (fileMD.mType == TYPE_DIRECTORY && fileMD.mSize != 0)
-		return std::string("Only files and empty directories can be removed.\n");
+		return std::string("Only files and empty directories can be removed with rm. Use rm -rf to delete directories\n");
 
 	//Mark the blocks as free again. Also fill them with zeroes for secure deletion.
 	int loc = fileLoc;

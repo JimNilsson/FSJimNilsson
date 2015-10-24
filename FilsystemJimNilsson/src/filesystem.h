@@ -38,6 +38,7 @@ public:
 	/* Loads an image of the harddrive */
     std::string read(const std::string &saveFile);
     std::string rm(std::string &path);
+	std::string rmrf(std::string path);
 	std::string cd(std::string dir);
 	std::string copy(std::string source, std::string dest);
 	int appendString(std::string path, std::string content);
