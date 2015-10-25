@@ -37,7 +37,7 @@ public:
     std::string save(const std::string &saveFile);
 	/* Loads an image of the harddrive */
     std::string read(const std::string &saveFile);
-    std::string rm(std::string &path);
+    std::string rm(std::string path, bool ignorePermission = false);
 	std::string rmrf(std::string path);
 	std::string cd(std::string dir);
 	std::string copy(std::string source, std::string dest);

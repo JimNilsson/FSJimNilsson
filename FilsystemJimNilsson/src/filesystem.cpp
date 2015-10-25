@@ -198,7 +198,7 @@ std::string FileSystem::rmrf(std::string path)
 	path = pathToAbsolutePath(path);
 	MetaData md = getMetaData(0, path);
 	if (md.mType == TYPE_FILE)
-		return rm(path);
+		return rm(path, true);
 	
 	std::string otherDir("");
 	int dirPos = 0;
@@ -214,7 +214,7 @@ std::string FileSystem::rmrf(std::string path)
 		if (dirPos % (512 - sizeof(MetaData)) == 0 && dirPos != 0)
 			startLoc = (unsigned char)pRAM[511];
 	}
-	rm(path);
+	rm(path, true);
 	return std::string("Recursively deleted.\n");
 }
 
@@ -461,7 +461,7 @@ int FileSystem::findMetaDataLocation(int blockNr, std::string path, int seekLeng
 	return findMetaDataLocation(md.mLocation, newPath, md.mSize);
 }
 
-std::string FileSystem::rm(std::string & path)
+std::string FileSystem::rm(std::string path, bool ignorePermissions)
 {
 	//Check if relative or absolute path
 	path = pathToAbsolutePath(path);
@@ -479,7 +479,7 @@ std::string FileSystem::rm(std::string & path)
 	if (fileLoc < 0)
 		return std::string("File does not exist\n");
 	//Check if file is allowed to be removed, we'll use the write flag for this
-	if (!(fileMD.mRights & CH_WRITE))
+	if (!(fileMD.mRights & CH_WRITE) && ignorePermissions == false)
 		return std::string("Access denied.\n");
 	//Only files and empty directories are allowed to be removed
 	if (fileMD.mType == TYPE_DIRECTORY && fileMD.mSize != 0)
@@ -753,35 +753,43 @@ std::string FileSystem::pwd()
 
 std::string FileSystem::pathToAbsolutePath(std::string path)
 {
+	std::string realPath = "";
 	if (path.back() != '/')
 		path.append("/");
 	if (path.compare(0, 1, "/") == 0)
-		return path;
-	if (path.compare(0, 2, "./") == 0)
-		return mCurrentDir + path.substr(2,path.size());
-	if (path.compare(0, 1, ".") != 0)
-		return mCurrentDir + path;
-	
-	/* If the user tries to ../ too far, it will just go to root directory. */
-	int goParentCount = 0;
-	while (path.compare(0, 3, "../") == 0)
-	{
-		++goParentCount;
-		path = path.substr(3, path.size());
-	}
-	std::vector<std::string> ps = split(mCurrentDir, '/');
+		realPath = path;
+	else
+		realPath = mCurrentDir + path;
+
+	std::vector<std::string> ps = split(realPath);
+	std::vector<int> toErase;
 	std::reverse(ps.begin(), ps.end());
-	std::string retpath("/");
-	for (int i = 0; i < goParentCount && ps.size() != 0; ++i)
-		ps.pop_back();
-	std::reverse(ps.begin(), ps.end());
-	for (int j = 0; j < ps.size(); ++j)
+	for (int i = 0; i < ps.size(); ++i)
 	{
-		retpath.append(ps.back()).append("/");
-		ps.pop_back();
+		if (ps[i].compare(".") == 0)
+		{
+			ps.erase(ps.begin() + i);
+			--i;
+		}
+		else if (ps[i].compare("..") == 0)
+		{
+			ps.erase(ps.begin() + i);
+			if (i - 1 >= 0)
+			{
+				ps.erase(ps.begin() + i - 1);
+				--i;
+			}
+			--i;
+		}
 	}
-	retpath.append(path);
-	return retpath;
+	std::string retPath = "";
+	for (int i = 0; i < ps.size(); ++i)
+	{
+		retPath.append("/");
+		retPath.append(ps[i]);
+	}
+	retPath.append("/");
+	return retPath;
 }
 
 std::string FileSystem::save(const std::string & saveFile) 
