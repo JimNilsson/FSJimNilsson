@@ -21,7 +21,6 @@ int findCommand(string &command);
 string help();
 
 int main(void) {
-
     string userCommand, commandArr[MAXCOMMANDS];
     string user = "user@DV1492";    // Change this if you want another user to be displayed
     string currentDir = "/";    // current directory, used for output

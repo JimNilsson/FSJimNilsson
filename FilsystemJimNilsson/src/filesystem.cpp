@@ -293,6 +293,11 @@ std::string FileSystem::create(std::string filePath, filetype_t type)
 			return std::string("No free blocks.\n");
 		}
 
+		//Mark the new block for the parent dir as occupied
+		mMemblockDevice.readBlock(0, pRAM);
+		pRAM[parentBlock + sizeof(MetaData)] = 1;
+		mMemblockDevice.writeBlock(0, pRAM);
+
 		mMemblockDevice.readBlock(curLoc, pRAM);
 		pRAM[511] = (unsigned char)parentBlock; //Last byte points to "continuation"-block
 		mMemblockDevice.writeBlock(curLoc, pRAM);
@@ -529,6 +534,25 @@ std::string FileSystem::rm(std::string path, bool ignorePermissions)
 	md.mSize -= sizeof(MetaData);
 	changeMetaData(parentPath, md);
 
+	//In case directory spanned several blocks before the deletion and now spans one less block, the last block pointer needs to be nulled and the block that it points to freed
+	if (md.mSize % (512 - sizeof(MetaData)) == 0 && md.mSize != 0)
+	{
+		int blocknum = md.mLocation;
+		int prevblock = blocknum;
+		mMemblockDevice.readBlock(blocknum, pRAM);
+		while (pRAM[511] != 0)
+		{
+			prevblock = blocknum;
+			blocknum = pRAM[511];
+			mMemblockDevice.readBlock(blocknum, pRAM);
+		}
+		mMemblockDevice.readBlock(prevblock, pRAM);
+		pRAM[511] = 0; //"clean" the block
+		mMemblockDevice.writeBlock(prevblock, pRAM);
+		mMemblockDevice.readBlock(0, pRAM);
+		pRAM[blocknum + sizeof(MetaData)] = 0; //Mark as free
+		mMemblockDevice.writeBlock(0, pRAM);
+	}
 	return std::string("File has been deleted.\n");
 }
 
