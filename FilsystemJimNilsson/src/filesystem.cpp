@@ -722,13 +722,16 @@ std::string FileSystem::cat(std::string path)
 	//Check if relative or absolute path
 	path = pathToAbsolutePath(path);
 	
-	//Check if the file exists
-	int fileLoc = findLocation(0, path);
-	if (fileLoc < 0)
-		return std::string("File not found.\n");
+	////Check if the file exists
+	//int fileLoc = findLocation(0, path);
+	//if (fileLoc < 0)
+	//	return std::string("File not found.\n");
 
 	//Check if it is a file
 	MetaData md = getMetaData(0, path);
+	int fileLoc = md.mLocation;
+	if (fileLoc < 0)
+		return std::string("File not found.\n");
 	if (md.mType != TYPE_FILE)
 		return std::string(path).append(" is not a file.\n");
 	if (!(md.mRights & CH_READ))
